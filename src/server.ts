@@ -28,42 +28,22 @@ function ensureSSLCertificates(): { key: Buffer; cert: Buffer } | null {
   const keyPath = path.join(__dirname, "../ssl/key.pem");
   const certPath = path.join(__dirname, "../ssl/cert.pem");
 
-  console.log("SSL証明書の確認中...");
-  console.log(`秘密鍵パス: ${keyPath}`);
-  console.log(`証明書パス: ${certPath}`);
-
   try {
-    // ファイルの存在確認
-    if (!fs.existsSync(keyPath)) {
-      console.error(`❌ 秘密鍵ファイルが見つかりません: ${keyPath}`);
-      return null;
-    }
-
-    if (!fs.existsSync(certPath)) {
-      console.error(`❌ 証明書ファイルが見つかりません: ${certPath}`);
-      return null;
-    }
-
-    // ファイルの読み込み確認
-    const keyStats = fs.statSync(keyPath);
-    const certStats = fs.statSync(certPath);
-
-    console.log(`🔑 秘密鍵サイズ: ${keyStats.size} bytes`);
-    console.log(`📜 証明書サイズ: ${certStats.size} bytes`);
-
-    if (keyStats.size === 0 || certStats.size === 0) {
-      console.error("❌ SSL証明書ファイルが空です");
+    if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
       return null;
     }
 
     const key = fs.readFileSync(keyPath);
     const cert = fs.readFileSync(certPath);
 
-    console.log("✅ SSL証明書の読み込みに成功しました");
+    if (key.length === 0 || cert.length === 0) {
+      console.error("❌ SSL証明書ファイルが空です");
+      return null;
+    }
+
     return { key, cert };
   } catch (error) {
-    console.error("❌ SSL証明書の読み込みに失敗しました:");
-    console.error(error instanceof Error ? error.message : error);
+    console.error("❌ SSL証明書の読み込みに失敗しました:", error instanceof Error ? error.message : error);
     return null;
   }
 }
@@ -114,17 +94,10 @@ let sslCredentials: { key: Buffer; cert: Buffer } | null = null;
 try {
   sslCredentials = ensureSSLCertificates();
   if (sslCredentials) {
-    console.log("🔒 HTTPS用の証明書を使用してサーバーを作成中...");
     httpsServer = createHttpsServer(sslCredentials, app);
-    console.log("✅ HTTPSサーバーの作成に成功しました");
-  } else {
-    console.log(
-      "⚠️  SSL証明書が見つからないため、HTTPSサーバーは作成されません"
-    );
   }
 } catch (error) {
-  console.error("❌ HTTPSサーバーの作成に失敗しました:");
-  console.error(error instanceof Error ? error.message : error);
+  console.error("❌ HTTPSサーバーの作成に失敗しました:", error instanceof Error ? error.message : error);
   httpsServer = null;
 }
 
@@ -145,18 +118,14 @@ if (httpsServer) {
         methods: ["GET", "POST"],
       },
     });
-    console.log("✅ HTTPS Socket.IOの初期化に成功しました");
   } catch (error) {
-    console.error("❌ HTTPS Socket.IOの初期化に失敗しました:");
-    console.error(error instanceof Error ? error.message : error);
+    console.error("❌ HTTPS Socket.IOの初期化に失敗しました:", error instanceof Error ? error.message : error);
     httpsIO = null;
   }
 }
 
 // Socket.IO接続処理を関数化
 function handleSocketConnection(socket: any, ioInstance: any) {
-  console.log("新しい接続:", socket.id);
-
   // ユーザー名設定
   socket.on("set-username", (username: string) => {
     const user: User = {
@@ -189,7 +158,6 @@ function handleSocketConnection(socket: any, ioInstance: any) {
       const user = users.get(socket.id);
       if (!user) return;
 
-      // 既存の共有セッションを停止
       if (user.isSharing) {
         socket.emit("error", "すでに画面共有中です");
         return;
@@ -214,8 +182,6 @@ function handleSocketConnection(socket: any, ioInstance: any) {
         hostUsername: user.username,
         shareType: data.shareType,
       });
-
-      console.log(`${user.username} が ${data.shareType} の共有を開始しました`);
     }
   );
 
@@ -228,7 +194,6 @@ function handleSocketConnection(socket: any, ioInstance: any) {
       user.isSharing = false;
       user.shareType = undefined;
 
-      // 視聴者に通知
       session.viewers.forEach((viewerId) => {
         ioInstance.to(viewerId).emit("share-ended", { hostId: socket.id });
       });
@@ -236,8 +201,6 @@ function handleSocketConnection(socket: any, ioInstance: any) {
       shareSessions.delete(socket.id);
       socket.broadcast.emit("share-unavailable", { hostId: socket.id });
       socket.emit("sharing-stopped");
-
-      console.log(`${user.username} が画面共有を停止しました`);
     }
   });
 
@@ -248,19 +211,32 @@ function handleSocketConnection(socket: any, ioInstance: any) {
 
     if (session && viewer) {
       session.viewers.add(socket.id);
+      
+      // 視聴者リストを作成
+      const viewers = Array.from(session.viewers).map(viewerId => {
+        const viewerUser = users.get(viewerId);
+        return viewerUser ? { id: viewerId, username: viewerUser.username } : null;
+      }).filter(Boolean);
+
       socket.emit("joined-as-viewer", {
         hostId,
         hostUsername: session.hostUsername,
       });
+      
+      // ホストに視聴者参加を通知（視聴者リスト付き）
       ioInstance.to(hostId).emit("viewer-joined", {
         viewerId: socket.id,
         viewerUsername: viewer.username,
         viewerCount: session.viewers.size,
+        viewers: viewers,
       });
 
-      console.log(
-        `${viewer.username} が ${session.hostUsername} の画面を視聴開始`
-      );
+      // 全体に視聴者数更新を通知
+      ioInstance.emit("viewers-updated", {
+        hostId,
+        viewerCount: session.viewers.size,
+        viewers: viewers,
+      });
     }
   });
 
@@ -271,14 +247,29 @@ function handleSocketConnection(socket: any, ioInstance: any) {
 
     if (session && viewer) {
       session.viewers.delete(socket.id);
+      
+      // 視聴者リストを作成
+      const viewers = Array.from(session.viewers).map(viewerId => {
+        const viewerUser = users.get(viewerId);
+        return viewerUser ? { id: viewerId, username: viewerUser.username } : null;
+      }).filter(Boolean);
+
       socket.emit("left-viewer");
+      
+      // ホストに視聴者離脱を通知（視聴者リスト付き）
       ioInstance.to(hostId).emit("viewer-left", {
         viewerId: socket.id,
         viewerUsername: viewer.username,
         viewerCount: session.viewers.size,
+        viewers: viewers,
       });
 
-      console.log(`${viewer.username} が視聴を終了`);
+      // 全体に視聴者数更新を通知
+      ioInstance.emit("viewers-updated", {
+        hostId,
+        viewerCount: session.viewers.size,
+        viewers: viewers,
+      });
     }
   });
 
@@ -316,7 +307,6 @@ function handleSocketConnection(socket: any, ioInstance: any) {
     const user = users.get(socket.id);
 
     if (user) {
-      // 画面共有中の場合は停止
       if (user.isSharing) {
         const session = shareSessions.get(socket.id);
         if (session) {
@@ -328,14 +318,28 @@ function handleSocketConnection(socket: any, ioInstance: any) {
         }
       }
 
-      // 視聴中の場合は離脱処理
       shareSessions.forEach((session, hostId) => {
         if (session.viewers.has(socket.id)) {
           session.viewers.delete(socket.id);
+          
+          // 視聴者リストを作成
+          const viewers = Array.from(session.viewers).map(viewerId => {
+            const viewerUser = users.get(viewerId);
+            return viewerUser ? { id: viewerId, username: viewerUser.username } : null;
+          }).filter(Boolean);
+
           ioInstance.to(hostId).emit("viewer-left", {
             viewerId: socket.id,
             viewerUsername: user.username,
             viewerCount: session.viewers.size,
+            viewers: viewers,
+          });
+
+          // 全体に視聴者数更新を通知
+          ioInstance.emit("viewers-updated", {
+            hostId,
+            viewerCount: session.viewers.size,
+            viewers: viewers,
           });
         }
       });
@@ -345,8 +349,6 @@ function handleSocketConnection(socket: any, ioInstance: any) {
         username: user.username,
         userCount: users.size,
       });
-
-      console.log(`${user.username} が切断しました`);
     }
   });
 }
@@ -370,19 +372,11 @@ const localIP = getLocalIPAddress();
 // HTTPSサーバーを起動（SSL証明書がある場合）
 if (httpsServer) {
   httpsServer.listen(PORT, "0.0.0.0", () => {
-    console.log("=================================");
-    console.log("🔒 HTTPSサーバーが起動しました！");
-    console.log("=================================");
-    console.log(`ローカル: https://localhost:${PORT}`);
-    console.log(`ネットワーク: https://${localIP}:${PORT}`);
-    console.log("✅ 画面共有機能が利用可能です");
-    console.log("=================================");
+    console.debug(`🔒 HTTPSサーバー起動: https://localhost:${PORT} | https://${localIP}:${PORT}`);
   });
 
   httpsServer.on("error", (error: any) => {
-    console.error("❌ HTTPSサーバーでエラーが発生しました:");
-    console.error(error);
-
+    console.error("❌ HTTPSサーバーでエラーが発生しました:", error);
     if (error.code === "EADDRINUSE") {
       console.error(`ポート ${PORT} は既に使用されています`);
     } else if (error.code === "EACCES") {
@@ -392,34 +386,19 @@ if (httpsServer) {
     }
   });
 } else {
-  console.log("=================================");
-  console.log("⚠️  HTTPSサーバーを起動できませんでした");
-  console.log("=================================");
-  console.log("SSL証明書を生成してください:");
-  console.log("npm run generate-ssl");
-  console.log("=================================");
+  console.debug("⚠️  HTTPSサーバーを起動できませんでした。SSL証明書を生成してください: npm run generate-ssl");
 }
 
 // HTTPサーバーを起動
 httpServer.listen(HTTP_PORT, "0.0.0.0", () => {
-  console.log("=================================");
-  console.log("🌐 HTTPサーバーが起動しました！");
-  console.log("=================================");
-  console.log(`ローカル: http://localhost:${HTTP_PORT}`);
-  console.log(`ネットワーク: http://${localIP}:${HTTP_PORT}`);
-  console.log("⚠️  画面共有はlocalhost接続でのみ利用可能");
-  console.log("=================================");
-
+  console.debug(`🌐 HTTPサーバー起動: http://localhost:${HTTP_PORT} | http://${localIP}:${HTTP_PORT}`);
   if (!httpsServer) {
-    console.log("💡 画面共有機能を使用するには:");
-    console.log("   npm run generate-ssl でSSL証明書を生成してください");
-    console.log("=================================");
+    console.debug("💡 画面共有機能を使用するには、 'npm run generate-ssl' でSSL証明書を生成し、HTTPSで接続してください。");
   }
 });
 
 httpServer.on("error", (error: any) => {
-  console.error("❌ HTTPサーバーでエラーが発生しました:");
-  console.error(error);
+  console.error("❌ HTTPサーバーでエラーが発生しました:", error);
 
   if (error.code === "EADDRINUSE") {
     console.error(`ポート ${HTTP_PORT} は既に使用されています`);

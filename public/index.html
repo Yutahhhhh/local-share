@@ -1,807 +1,89 @@
 <!DOCTYPE html>
 <html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ローカル画面共有</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <link rel="stylesheet" href="style.css" />
+  </head>
 
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ローカル画面共有</title>
-  <script src="/socket.io/socket.io.js"></script>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    body {
-      font-family: 'Hiragino Sans', 'Yu Gothic Medium', 'Meiryo', sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      min-height: 100vh;
-      color: #333;
-    }
-
-    .container {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 20px;
-    }
-
-    .header {
-      background: white;
-      border-radius: 10px;
-      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-      padding: 20px;
-      margin-bottom: 20px;
-      text-align: center;
-    }
-
-    .header h1 {
-      color: #4a5568;
-      margin-bottom: 10px;
-    }
-
-    .user-info {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      background: #f7fafc;
-      padding: 10px 20px;
-      border-radius: 8px;
-      margin-top: 15px;
-    }
-
-    .main-content {
-      display: grid;
-      grid-template-columns: 300px 1fr;
-      gap: 20px;
-      height: calc(100vh - 180px);
-    }
-
-    .sidebar {
-      background: white;
-      border-radius: 10px;
-      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-      padding: 20px;
-      overflow-y: auto;
-    }
-
-    .viewer-area {
-      background: white;
-      border-radius: 10px;
-      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .section {
-      margin-bottom: 30px;
-    }
-
-    .section h3 {
-      color: #4a5568;
-      margin-bottom: 15px;
-      padding-bottom: 8px;
-      border-bottom: 2px solid #e2e8f0;
-    }
-
-    .share-controls {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    .share-type-selector {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      margin-bottom: 15px;
-    }
-
-    .share-type-selector label {
-      display: flex;
-      align-items: center;
-      padding: 10px;
-      border: 2px solid #e2e8f0;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: all 0.3s;
-    }
-
-    .share-type-selector label:hover {
-      border-color: #667eea;
-      background: #f7fafc;
-    }
-
-    .share-type-selector input[type="radio"] {
-      margin-right: 8px;
-    }
-
-    .share-type-selector input[type="radio"]:checked+span {
-      font-weight: bold;
-    }
-
-    button {
-      padding: 12px 20px;
-      border: none;
-      border-radius: 8px;
-      font-size: 16px;
-      font-weight: bold;
-      cursor: pointer;
-      transition: all 0.3s;
-    }
-
-    .btn-primary {
-      background: #667eea;
-      color: white;
-    }
-
-    .btn-primary:hover:not(:disabled) {
-      background: #5a67d8;
-      transform: translateY(-2px);
-    }
-
-    .btn-danger {
-      background: #e53e3e;
-      color: white;
-    }
-
-    .btn-danger:hover:not(:disabled) {
-      background: #c53030;
-    }
-
-    .btn-secondary {
-      background: #edf2f7;
-      color: #4a5568;
-      border: 1px solid #e2e8f0;
-    }
-
-    .btn-secondary:hover:not(:disabled) {
-      background: #e2e8f0;
-    }
-
-    button:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-      transform: none !important;
-    }
-
-    .share-session {
-      background: #f7fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      padding: 15px;
-      margin-bottom: 10px;
-    }
-
-    .share-session.active {
-      border-color: #48bb78;
-      background: #f0fff4;
-    }
-
-    .share-info {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 10px;
-    }
-
-    .share-details {
-      font-size: 14px;
-      color: #718096;
-    }
-
-    .video-container {
-      flex: 1;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      background: #2d3748;
-      border-radius: 8px;
-      position: relative;
-      min-height: 400px;
-    }
-
-    .main-video {
-      max-width: 100%;
-      max-height: 100%;
-      border-radius: 8px;
-    }
-
-    .no-stream {
-      color: #a0aec0;
-      text-align: center;
-      font-size: 18px;
-    }
-
-    .viewer-list {
-      margin-top: 15px;
-      font-size: 14px;
-    }
-
-    .viewer-item {
-      padding: 8px;
-      background: #edf2f7;
-      border-radius: 6px;
-      margin-bottom: 5px;
-    }
-
-    .status-indicator {
-      display: inline-block;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      margin-right: 8px;
-    }
-
-    .status-online {
-      background: #48bb78;
-    }
-
-    .status-sharing {
-      background: #ed8936;
-    }
-
-    .username-modal {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.5);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 1000;
-    }
-
-    .username-form {
-      background: white;
-      padding: 30px;
-      border-radius: 10px;
-      text-align: center;
-      min-width: 300px;
-    }
-
-    .username-form h3 {
-      margin-bottom: 20px;
-      color: #4a5568;
-    }
-
-    .input-group {
-      display: flex;
-      gap: 10px;
-      margin-top: 15px;
-    }
-
-    input[type="text"] {
-      flex: 1;
-      padding: 10px;
-      border: 2px solid #e2e8f0;
-      border-radius: 5px;
-      font-size: 16px;
-      outline: none;
-    }
-
-    input[type="text"]:focus {
-      border-color: #667eea;
-    }
-
-    .error-message {
-      background: #fed7d7;
-      color: #c53030;
-      padding: 10px;
-      border-radius: 8px;
-      margin-bottom: 15px;
-      border: 1px solid #feb2b2;
-    }
-
-    .success-message {
-      background: #c6f6d5;
-      color: #22543d;
-      padding: 10px;
-      border-radius: 8px;
-      margin-bottom: 15px;
-      border: 1px solid #9ae6b4;
-    }
-
-    @media (max-width: 768px) {
-      .main-content {
-        grid-template-columns: 1fr;
-        height: auto;
-      }
-
-      .sidebar {
-        order: 2;
-      }
-
-      .viewer-area {
-        order: 1;
-        min-height: 300px;
-      }
-    }
-  </style>
-</head>
-
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>🖥️ ローカル画面共有</h1>
-      <div class="user-info">
-        <div>
-          <span class="status-indicator status-online"></span>
-          <span id="current-user">ゲスト</span>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>ローカル画面共有</h1>
+        <div class="user-info">
+          <div>
+            <span class="status-indicator status-online"></span>
+            <span id="current-user">ゲスト</span>
+          </div>
+          <div id="user-count" title="現在このアプリに接続している全ユーザー数">0人が接続中</div>
         </div>
-        <div id="user-count">0人が接続中</div>
       </div>
-    </div>
 
-    <div class="main-content">
-      <div class="sidebar">
-        <!-- 画面共有コントロール -->
-        <div class="section">
-          <h3>📤 画面共有</h3>
-          <div id="share-controls" class="share-controls">
-            <div class="share-type-selector">
-              <label>
-                <input type="radio" name="shareType" value="screen" checked>
-                <span>🖥️ 画面全体</span>
-              </label>
-              <label>
-                <input type="radio" name="shareType" value="window">
-                <span>🪟 ウィンドウ</span>
-              </label>
-              <label>
-                <input type="radio" name="shareType" value="tab">
-                <span>🌐 ブラウザタブ</span>
-              </label>
+      <div class="main-content">
+        <div class="sidebar">
+          <div class="section">
+            <h3>画面共有</h3>
+            <div id="share-controls" class="share-controls">
+              <button id="start-share-btn" class="btn-primary">共有開始</button>
+              <button
+                id="stop-share-btn"
+                class="btn-danger"
+                style="display: none"
+              >
+                共有停止
+              </button>
             </div>
-            <button id="start-share-btn" class="btn-primary">共有開始</button>
-            <button id="stop-share-btn" class="btn-danger" style="display: none;">共有停止</button>
           </div>
-        </div>
 
-        <!-- アクティブな共有一覧 -->
-        <div class="section">
-          <h3>📺 利用可能な共有</h3>
-          <div id="available-shares">
-            <p class="no-stream">共有中の画面はありません</p>
-          </div>
-        </div>
-
-        <!-- 視聴者リスト -->
-        <div class="section" id="viewers-section" style="display: none;">
-          <h3>👥 視聴者</h3>
-          <div id="viewer-list"></div>
-        </div>
-      </div>
-
-      <div class="viewer-area">
-        <div class="video-container" id="video-container">
-          <div class="no-stream">
-            <p>画面共有を開始するか、他のユーザーの共有を視聴してください</p>
-          </div>
-          <video id="main-video" class="main-video" autoplay style="display: none;"></video>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ユーザー名入力モーダル -->
-  <div class="username-modal" id="username-modal">
-    <div class="username-form">
-      <h3>ユーザー名を入力してください</h3>
-      <div class="input-group">
-        <input type="text" id="username-input" placeholder="ユーザー名" maxlength="20">
-        <button id="username-submit" class="btn-primary">参加</button>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    class ScreenShareApp {
-      constructor() {
-        this.socket = io();
-        this.currentUsername = '';
-        this.isSharing = false;
-        this.currentStream = null;
-        this.peerConnections = new Map();
-        this.currentViewingHost = null;
-        this.viewerConnection = null;
-
-        this.initializeEventListeners();
-        this.setupSocketEvents();
-      }
-
-      initializeEventListeners() {
-        // ユーザー名設定
-        document.getElementById('username-submit').addEventListener('click', () => {
-          const username = document.getElementById('username-input').value.trim();
-          if (username) {
-            this.socket.emit('set-username', username);
-          }
-        });
-
-        document.getElementById('username-input').addEventListener('keypress', (e) => {
-          if (e.key === 'Enter') {
-            document.getElementById('username-submit').click();
-          }
-        });
-
-        // 画面共有制御
-        document.getElementById('start-share-btn').addEventListener('click', () => {
-          this.startSharing();
-        });
-
-        document.getElementById('stop-share-btn').addEventListener('click', () => {
-          this.stopSharing();
-        });
-      }
-
-      setupSocketEvents() {
-        this.socket.on('username-set', (username) => {
-          this.currentUsername = username;
-          document.getElementById('current-user').textContent = `ユーザー: ${username}`;
-          document.getElementById('username-modal').style.display = 'none';
-        });
-
-        this.socket.on('user-joined', (data) => {
-          document.getElementById('user-count').textContent = `${data.userCount}人が接続中`;
-        });
-
-        this.socket.on('user-left', (data) => {
-          document.getElementById('user-count').textContent = `${data.userCount}人が接続中`;
-        });
-
-        this.socket.on('sharing-started', () => {
-          this.isSharing = true;
-          document.getElementById('start-share-btn').style.display = 'none';
-          document.getElementById('stop-share-btn').style.display = 'block';
-          document.getElementById('viewers-section').style.display = 'block';
-        });
-
-        this.socket.on('sharing-stopped', () => {
-          this.isSharing = false;
-          document.getElementById('start-share-btn').style.display = 'block';
-          document.getElementById('stop-share-btn').style.display = 'none';
-          document.getElementById('viewers-section').style.display = 'none';
-          this.stopCurrentStream();
-        });
-
-        this.socket.on('share-available', (data) => {
-          this.addAvailableShare(data);
-        });
-
-        this.socket.on('share-unavailable', (data) => {
-          this.removeAvailableShare(data.hostId);
-        });
-
-        this.socket.on('active-shares', (shares) => {
-          this.updateAvailableShares(shares);
-        });
-
-        this.socket.on('viewer-joined', (data) => {
-          this.handleViewerJoined(data);
-        });
-
-        this.socket.on('viewer-left', (data) => {
-          this.handleViewerLeft(data);
-        });
-
-        // WebRTC シグナリング
-        this.socket.on('offer', (data) => {
-          this.handleOffer(data);
-        });
-
-        this.socket.on('answer', (data) => {
-          this.handleAnswer(data);
-        });
-
-        this.socket.on('ice-candidate', (data) => {
-          this.handleIceCandidate(data);
-        });
-
-        this.socket.on('joined-as-viewer', (data) => {
-          this.handleJoinedAsViewer(data);
-        });
-
-        this.socket.on('share-ended', (data) => {
-          this.handleShareEnded(data);
-        });
-      }
-
-      async startSharing() {
-        if (!this.checkScreenShareSupport()) {
-          return;
-        }
-
-        const shareType = document.querySelector('input[name="shareType"]:checked').value;
-
-        try {
-          this.currentStream = await navigator.mediaDevices.getDisplayMedia({
-            video: true,
-            audio: false
-          });
-
-          this.currentStream.getVideoTracks()[0].addEventListener('ended', () => {
-            this.stopSharing();
-          });
-
-          this.socket.emit('start-sharing', { shareType });
-          this.showSuccess('画面共有を開始しました');
-
-        } catch (error) {
-          console.error('画面共有の開始に失敗:', error);
-          this.handleScreenShareError(error);
-        }
-      }
-
-      checkScreenShareSupport() {
-        if (!window.isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-          this.showError('画面共有はHTTPS環境またはlocalhost環境でのみ利用可能です。');
-          return false;
-        }
-
-        if (!navigator.mediaDevices) {
-          this.showError('お使いのブラウザは画面共有をサポートしていません。');
-          return false;
-        }
-
-        if (!navigator.mediaDevices.getDisplayMedia) {
-          this.showError('お使いのブラウザは画面共有機能をサポートしていません。');
-          return false;
-        }
-
-        return true;
-      }
-
-      handleScreenShareError(error) {
-        let errorMessage = '画面共有の開始に失敗しました。';
-
-        if (error.name === 'NotAllowedError') {
-          errorMessage = '画面共有が拒否されました。';
-        } else if (error.name === 'NotSupportedError') {
-          errorMessage = 'ブラウザが画面共有をサポートしていません。';
-        } else if (error.name === 'NotFoundError') {
-          errorMessage = '共有可能な画面が見つかりませんでした。';
-        } else if (error.name === 'AbortError') {
-          errorMessage = '画面共有がキャンセルされました。';
-        }
-
-        this.showError(errorMessage);
-      }
-
-      showError(message) {
-        const existingError = document.querySelector('.error-message');
-        if (existingError) {
-          existingError.remove();
-        }
-
-        const errorDiv = document.createElement('div');
-        errorDiv.className = 'error-message';
-        errorDiv.textContent = message;
-
-        const shareControls = document.getElementById('share-controls');
-        shareControls.insertBefore(errorDiv, shareControls.firstChild);
-
-        setTimeout(() => {
-          if (errorDiv.parentNode) {
-            errorDiv.remove();
-          }
-        }, 5000);
-      }
-
-      showSuccess(message) {
-        const existing = document.querySelector('.success-message');
-        if (existing) {
-          existing.remove();
-        }
-
-        const successDiv = document.createElement('div');
-        successDiv.className = 'success-message';
-        successDiv.textContent = message;
-
-        const shareControls = document.getElementById('share-controls');
-        shareControls.insertBefore(successDiv, shareControls.firstChild);
-
-        setTimeout(() => {
-          if (successDiv.parentNode) {
-            successDiv.remove();
-          }
-        }, 3000);
-      }
-
-      stopSharing() {
-        this.socket.emit('stop-sharing');
-        this.stopCurrentStream();
-
-        this.peerConnections.forEach(pc => pc.close());
-        this.peerConnections.clear();
-      }
-
-      stopCurrentStream() {
-        if (this.currentStream) {
-          this.currentStream.getTracks().forEach(track => track.stop());
-          this.currentStream = null;
-        }
-      }
-
-      updateAvailableShares(shares) {
-        const container = document.getElementById('available-shares');
-        container.innerHTML = '';
-
-        if (shares.length === 0) {
-          container.innerHTML = '<p class="no-stream">共有中の画面はありません</p>';
-          return;
-        }
-
-        shares.forEach(share => {
-          this.addAvailableShare(share);
-        });
-      }
-
-      addAvailableShare(share) {
-        const container = document.getElementById('available-shares');
-        const noStreamMsg = container.querySelector('.no-stream');
-        if (noStreamMsg) {
-          noStreamMsg.remove();
-        }
-
-        const shareEl = document.createElement('div');
-        shareEl.className = 'share-session';
-        shareEl.id = `share-${share.hostId}`;
-
-        const shareTypeIcon = {
-          'screen': '🖥️',
-          'window': '🪟',
-          'tab': '🌐'
-        };
-
-        shareEl.innerHTML = `
-          <div class="share-info">
-            <div>
-              <strong>${shareTypeIcon[share.shareType]} ${share.hostUsername}</strong>
-              <div class="share-details">${share.shareType} • ${share.viewerCount || 0} 視聴者</div>
+          <div class="section">
+            <h3>📺 利用可能な共有</h3>
+            <div id="available-shares">
+              <p class="no-stream">共有中の画面はありません</p>
             </div>
-            <button class="btn-secondary" onclick="app.joinAsViewer('${share.hostId}')">視聴</button>
           </div>
-        `;
 
-        container.appendChild(shareEl);
-      }
+          <div class="section" id="viewers-section" style="display: none">
+            <h3>視聴者</h3>
+            <div id="viewer-list"></div>
+          </div>
+        </div>
 
-      removeAvailableShare(hostId) {
-        const shareEl = document.getElementById(`share-${hostId}`);
-        if (shareEl) {
-          shareEl.remove();
-        }
+        <div class="viewer-area">
+          <div class="video-container" id="video-container">
+            <div class="no-stream">
+              <p>視聴する画面を選択してください</p>
+            </div>
+            <video
+              id="main-video"
+              class="main-video"
+              autoplay
+              style="display: none"
+            ></video>
+            <button id="fullscreen-btn" class="fullscreen-btn" title="全画面表示" style="display: none">
+              <span class="fullscreen-icon">⛶</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
 
-        const container = document.getElementById('available-shares');
-        if (container.children.length === 0) {
-          container.innerHTML = '<p class="no-stream">共有中の画面はありません</p>';
-        }
-      }
+    <div class="username-modal" id="username-modal">
+      <div class="username-form">
+        <h3>ユーザー名を入力してください</h3>
+        <div class="input-group">
+          <input
+            type="text"
+            id="username-input"
+            placeholder="ユーザー名"
+            maxlength="20"
+          />
+          <button id="username-submit" class="btn-primary">参加</button>
+        </div>
+      </div>
+    </div>
 
-      async joinAsViewer(hostId) {
-        this.currentViewingHost = hostId;
-        this.socket.emit('join-viewer', hostId);
-      }
-
-      async handleJoinedAsViewer(data) {
-        this.viewerConnection = new RTCPeerConnection({
-          iceServers: []
-        });
-
-        this.viewerConnection.ontrack = (event) => {
-          const video = document.getElementById('main-video');
-          video.srcObject = event.streams[0];
-          video.style.display = 'block';
-          document.querySelector('.no-stream').style.display = 'none';
-        };
-
-        this.viewerConnection.onicecandidate = (event) => {
-          if (event.candidate) {
-            this.socket.emit('ice-candidate', {
-              targetId: data.hostId,
-              candidate: event.candidate.toJSON()
-            });
-          }
-        };
-
-        const offer = await this.viewerConnection.createOffer();
-        await this.viewerConnection.setLocalDescription(offer);
-
-        this.socket.emit('offer', {
-          hostId: data.hostId,
-          offer: offer.toJSON()
-        });
-      }
-
-      async handleOffer(data) {
-        const pc = new RTCPeerConnection({
-          iceServers: []
-        });
-
-        pc.onicecandidate = (event) => {
-          if (event.candidate) {
-            this.socket.emit('ice-candidate', {
-              targetId: data.viewerId,
-              candidate: event.candidate.toJSON()
-            });
-          }
-        };
-
-        if (this.currentStream) {
-          this.currentStream.getTracks().forEach(track => {
-            pc.addTrack(track, this.currentStream);
-          });
-        }
-
-        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-
-        this.socket.emit('answer', {
-          viewerId: data.viewerId,
-          answer: answer.toJSON()
-        });
-
-        this.peerConnections.set(data.viewerId, pc);
-      }
-
-      async handleAnswer(data) {
-        if (this.viewerConnection) {
-          await this.viewerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-        }
-      }
-
-      async handleIceCandidate(data) {
-        const pc = this.peerConnections.get(data.fromId) || this.viewerConnection;
-        if (pc) {
-          await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-        }
-      }
-
-      handleViewerJoined(data) {
-        this.updateViewerList();
-      }
-
-      handleViewerLeft(data) {
-        this.updateViewerList();
-
-        const pc = this.peerConnections.get(data.viewerId);
-        if (pc) {
-          pc.close();
-          this.peerConnections.delete(data.viewerId);
-        }
-      }
-
-      handleShareEnded(data) {
-        if (this.currentViewingHost === data.hostId) {
-          this.currentViewingHost = null;
-          if (this.viewerConnection) {
-            this.viewerConnection.close();
-            this.viewerConnection = null;
-          }
-
-          const video = document.getElementById('main-video');
-          video.style.display = 'none';
-          document.querySelector('.no-stream').style.display = 'block';
-        }
-      }
-
-      updateViewerList() {
-        const viewerList = document.getElementById('viewer-list');
-        viewerList.innerHTML = '<div class="viewer-item">視聴者情報を更新中...</div>';
-      }
-    }
-
-    // アプリケーション初期化
-    const app = new ScreenShareApp();
-
-    // ページ読み込み時にユーザー名入力にフォーカス
-    document.getElementById('username-input').focus();
-  </script>
-</body>
-
+    <script src="script.js"></script>
+  </body>
 </html>
